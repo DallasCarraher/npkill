@@ -27,6 +27,19 @@ import {
 
 const CURSOR_ROW_COLOR = 'bgBlue';
 
+/** Cycle order used by the 's' key to change the active sort mode. */
+const SORT_CYCLE = ['size', 'path', 'age'] as const;
+type SortMode = (typeof SORT_CYCLE)[number];
+
+const SORT_LABELS: Record<SortMode, string> = {
+  size: 'Size',
+  path: 'Name',
+  age: 'Age',
+};
+
+/** Max delay (ms) between two 'g' presses to be treated as 'gg'. */
+const DOUBLE_G_PRESS_MS = 400;
+
 export class ResultsUi extends HeavyUi implements InteractiveUi {
   resultIndex = 0;
   previousIndex = 0;
@@ -52,6 +65,9 @@ export class ResultsUi extends HeavyUi implements InteractiveUi {
   private isSearchInputMode = false;
   private searchText = '';
   private filteredResults: CliScanFoundFolder[] = [];
+
+  private sortIndex = 0;
+  private lastGPressTime = 0;
 
   private config: IConfig = DEFAULT_CONFIG;
   private readonly KEYS = {
@@ -79,6 +95,7 @@ export class ResultsUi extends HeavyUi implements InteractiveUi {
     enter: () => this.deleteSelected(),
     v: () => this.startRangeSelection(),
     a: () => this.toggleSelectAll(),
+    s: () => this.cycleSort(),
   };
 
   constructor(
@@ -90,6 +107,9 @@ export class ResultsUi extends HeavyUi implements InteractiveUi {
     if (config) {
       this.config = config;
     }
+
+    const initialSortIndex = SORT_CYCLE.indexOf(this.config.sortBy as SortMode);
+    this.sortIndex = initialSortIndex === -1 ? 0 : initialSortIndex;
   }
 
   private openFolder(): void {
@@ -305,6 +325,14 @@ export class ResultsUi extends HeavyUi implements InteractiveUi {
       return;
     }
 
+    if (key.name === 'g') {
+      this.handleGPress(key.shift);
+      if (this.visible) {
+        this.render();
+      }
+      return;
+    }
+
     const action: (() => void) | undefined = this.KEYS[key.name];
     if (action === undefined) {
       return;
@@ -368,6 +396,15 @@ export class ResultsUi extends HeavyUi implements InteractiveUi {
 
       this.printAt(truncatedInstructionMessage, {
         x: startX,
+        y: MARGINS.ROW_RESULTS_START - 2,
+      });
+    } else if (!this.isSearchInputMode) {
+      const sortMessage = pc.gray(
+        `Sort: ${pc.bold(this.getSortLabel())} (${pc.bold('s')}: cycle)`,
+      );
+      const availableWidth = this.terminal.columns - tagStartXPosition;
+      this.printAt(this.truncateText(sortMessage, availableWidth), {
+        x: tagStartXPosition,
         y: MARGINS.ROW_RESULTS_START - 2,
       });
     }
@@ -569,6 +606,52 @@ export class ResultsUi extends HeavyUi implements InteractiveUi {
 
   cursorLastResult(): void {
     this.moveCursor(this.results.length - 1);
+  }
+
+  /**
+   * Handles a 'g' keypress: 'G' (shift+g) jumps to the last result, while
+   * pressing 'g' twice in quick succession (vim-style 'gg') jumps to the
+   * first result.
+   */
+  private handleGPress(shift: boolean): void {
+    if (shift) {
+      this.cursorLastResult();
+      this.lastGPressTime = 0;
+      return;
+    }
+
+    const now = Date.now();
+    if (now - this.lastGPressTime <= DOUBLE_G_PRESS_MS) {
+      this.cursorFirstResult();
+      this.lastGPressTime = 0;
+    } else {
+      this.lastGPressTime = now;
+    }
+  }
+
+  getSortLabel(): string {
+    return SORT_LABELS[SORT_CYCLE[this.sortIndex]];
+  }
+
+  /** Cycles through size -> name (path) -> age sort modes, keeping the cursor on the current folder. */
+  private cycleSort(): void {
+    const currentFolder = this.results[this.resultIndex];
+
+    this.sortIndex = (this.sortIndex + 1) % SORT_CYCLE.length;
+    const sortMode = SORT_CYCLE[this.sortIndex];
+
+    this.resultsService.sortResults(sortMode);
+    if (this.searchText) {
+      this.filterResults();
+    }
+
+    const newIndex = currentFolder
+      ? this.results.findIndex((f) => f.path === currentFolder.path)
+      : -1;
+    this.resultIndex = newIndex === -1 ? 0 : newIndex;
+    this.scroll = 0;
+    this.fitScroll();
+    this.clear();
   }
 
   fitScroll(): void {
