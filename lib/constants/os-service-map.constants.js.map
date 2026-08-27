@@ -1,0 +1,1 @@
+{"version":3,"file":"os-service-map.constants.js","sourceRoot":"","sources":["../../src/constants/os-service-map.constants.ts"],"names":[],"mappings":"AAAA,OAAO,EACL,gBAAgB,EAChB,mBAAmB,GACpB,MAAM,iCAAiC,CAAC;AAEzC;;;GAGG;AACH,MAAM,CAAC,MAAM,YAAY,GAAG;IAC1B,KAAK,EAAE,gBAAgB;IACvB,MAAM,EAAE,gBAAgB;IACxB,KAAK,EAAE,mBAAmB;CAC3B,CAAC"}

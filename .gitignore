@@ -1,5 +1,4 @@
 node_modules
-lib
 out.txt
 # stryker temp files
 .stryker-tmp
