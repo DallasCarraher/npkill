@@ -316,4 +316,124 @@ describe('ResultsUi', () => {
       expect(resultsUi['rangeSelectionStart']).toBe(null);
     });
   });
+
+  describe('vim-style navigation', () => {
+    beforeEach(() => {
+      resultsServiceMock.results = [
+        { path: 'folder/1', size: 1, status: 'live' },
+        { path: 'folder/2', size: 1, status: 'live' },
+        { path: 'folder/3', size: 1, status: 'live' },
+      ] as CliScanFoundFolder[];
+      resultsUi = new ResultsUi(resultsServiceMock, consoleServiceMock);
+    });
+
+    const pressG = (shift = false) =>
+      resultsUi.onKeyInput({
+        name: 'g',
+        meta: false,
+        ctrl: false,
+        shift,
+        sequence: shift ? 'G' : 'g',
+      });
+
+    it('should jump to the last result with "G" (shift+g)', () => {
+      expect(resultsUi['resultIndex']).toBe(0);
+      pressG(true);
+      expect(resultsUi['resultIndex']).toBe(2);
+    });
+
+    it('should jump to the first result with double "g" press ("gg")', () => {
+      pressG(true); // move to last result first
+      expect(resultsUi['resultIndex']).toBe(2);
+
+      pressG();
+      pressG();
+      expect(resultsUi['resultIndex']).toBe(0);
+    });
+
+    it('should not jump to the first result on a single "g" press', () => {
+      pressG(true); // move to last result first
+
+      pressG();
+      expect(resultsUi['resultIndex']).toBe(2);
+    });
+
+    it('should reset the double-press window after a single stale "g"', () => {
+      pressG(true); // move to last result
+
+      resultsUi['lastGPressTime'] = Date.now() - 1000; // simulate an old press
+      pressG();
+      pressG();
+      expect(resultsUi['resultIndex']).toBe(0);
+    });
+  });
+
+  describe('sort cycling', () => {
+    beforeEach(() => {
+      resultsServiceMock.results = [
+        { path: 'folder/b', size: 5, status: 'live' },
+        { path: 'folder/a', size: 20, status: 'live' },
+        { path: 'folder/c', size: 1, status: 'live' },
+      ] as CliScanFoundFolder[];
+
+      (
+        resultsServiceMock as unknown as { sortResults: jest.Mock }
+      ).sortResults = jest.fn((method: string) => {
+        const sorters: Record<
+          string,
+          (a: CliScanFoundFolder, b: CliScanFoundFolder) => number
+        > = {
+          size: (a, b) => b.size - a.size,
+          path: (a, b) => (a.path > b.path ? 1 : -1),
+        };
+        resultsServiceMock.results = [...resultsServiceMock.results].sort(
+          sorters[method],
+        );
+      }) as unknown as jest.Mock;
+
+      resultsUi = new ResultsUi(resultsServiceMock, consoleServiceMock);
+    });
+
+    const pressS = () =>
+      resultsUi.onKeyInput({
+        name: 's',
+        meta: false,
+        ctrl: false,
+        shift: false,
+        sequence: 's',
+      });
+
+    it('should cycle sort mode from size to name (path) on "s"', () => {
+      expect(resultsUi.getSortLabel()).toBe('Size');
+
+      pressS();
+
+      expect(resultsUi.getSortLabel()).toBe('Name');
+      expect(resultsServiceMock.results[0].path).toBe('folder/a');
+    });
+
+    it('should cycle back to size after name and age', () => {
+      pressS(); // name
+      pressS(); // age
+      pressS(); // back to size
+
+      expect(resultsUi.getSortLabel()).toBe('Size');
+    });
+
+    it('should keep the cursor on the same folder after re-sorting', () => {
+      resultsUi.onKeyInput({
+        name: 'down',
+        meta: false,
+        ctrl: false,
+        shift: false,
+        sequence: '\u001b[B',
+      }); // move to folder/a (index 1)
+
+      pressS(); // sort by name: folder/a, folder/b, folder/c
+
+      expect(resultsUi['results'][resultsUi['resultIndex']].path).toBe(
+        'folder/a',
+      );
+    });
+  });
 });
