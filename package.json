@@ -42,7 +42,7 @@
     "test:mutant": "stryker run",
     "release": "npm run build && np",
     "debug": "TS_NODE_FILES=true node --inspect -r ts-node/register ./src/index.ts",
-    "prepare": "husky install",
+    "prepare": "node -e \"try{require('child_process').execSync('husky install',{stdio:'ignore'})}catch(e){}\" && npm run build",
     "format": "prettier --write .",
     "lint": "eslint"
   },
